@@ -44,27 +44,6 @@ int sizeOfUserName = 0;
 char* hostName;
 int sizeOfHostName = 0;
 
-bool SendInteger(int clientSock, int hostInt);
-// Function sends a network long variable over the network.
-// pre: socket must exist
-// post: none
-
-long GetInteger(int clientSock);
-// Function listens to socket for a network Long variable. 
-// pre: socket must exist.
-// post: none
-
-bool SendMessage(int clientSock, string msgToSend);
-// Function sends a message over network.
-// pre: Socket must exist and should have paired this function with SendInt(MSG.length()+1)
-// post: none.
-
-string GetMessage(int clientSock, long messageLength);
-// Function listens to socket for a variable length message.
-// pre: socket must exist.
-// post: none
-
-
 void runServerRequest (int clientSock);
 // Function handles server interactions and displays messages from server.
 // pre: socket must exist and be open.
@@ -84,26 +63,8 @@ int main(int argNum, char* argValues[]) {
 
   // Now we need to split our input into a username and hostname
   bool foundUserName = false;
-  for (int i = 0; i < sizeOfArg; i++) {
-    if (localArg[i] == '@' && !foundUserName) {
-      // We found the delimiter '@' so let's split the argument up.
-      sizeOfUserName = (i + 1);
-      userName = new char[sizeOfUserName];
-      for (int j = 0; j < i; j++) {
-	// Copy over char by char the UserName
-	userName[j] = localArg[j];
-      }
-      foundUserName = true;
 
-      hostName = new char[sizeOfArg - ( i+ 1)];
-      sizeOfHostName = (sizeOfArg - (i+ 1));
-      continue;
-    }
-    if (foundUserName) {
-      // Copy over rest of argument into hostName.
-      hostName[i - sizeOfUserName] = localArg[i];
-    }
-  }
+  
   
   // Create a socket and start server communications.
   int conn_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -119,8 +80,11 @@ int main(int argNum, char* argValues[]) {
   }
 
 
+  // Housekeeping
   delete [] userName;
   delete [] hostName;
+
+  // Well done!
   return 0;
 }
 
@@ -160,94 +124,9 @@ void runServerRequest (int clientSock) {
   }
 
   // Begin handling communication with Server.
-  SendInteger(clientSock, (long)s_userName.length());
-  SendMessage(clientSock, s_userName);
 
-  // Begin handling communication with Server.
-  SendInteger(clientSock, (long)s_userName.length());
-  SendMessage(clientSock, s_userName);
-
-  // Read Data
-  int bufferSize = 1024;
-  int bytesLeft = bufferSize;
-  char buffer[bufferSize];
-  char* buffPTR = buffer;
-  int realSize = 0;
-  while ((bytesRecv = recv(clientSock, buffPTR, bufferSize, 0)) > 0){
-    //buffPTR = buffPTR + bytesRecv;
-    //bytesLeft = bytesLeft - bytesRecv;
-    //realSize += bytesRecv;
-    write(1,buffer, bytesRecv);
-  }
   
+  // Close it down!
   close(clientSock);
   exit(1);
 }
-
-long GetInteger(int clientSock){
-
-  // Retreive length of msg
-  int bytesLeft = sizeof(long);
-  long networkInt;
-  char* bp = (char *) &networkInt;
-  
-  while (bytesLeft) {
-    int bytesRecv = recv(clientSock, bp, bytesLeft, 0);
-    if (bytesRecv <= 0) exit(-1);
-    bytesLeft = bytesLeft - bytesRecv;
-    bp = bp + bytesRecv;
-  }
-  return ntohl(networkInt);
-}
-
-bool SendInteger(int clientSock, int hostInt){
-
-  // Local Variables
-  long networkInt = htonl(hostInt);
-
-  // Send Integer (as a long)
-  int didSend = send(clientSock, &networkInt, sizeof(long), 0);
-  if (didSend != sizeof(long)){
-    // Failed to Send
-    cerr << "Unable to send data. Aborting program." << endl;
-    exit(-1);
-  }
-
-  return true;
-}
-
-string GetMessage(int clientSock, long messageLength){
-  
-  // Retrieve msg
-  int bytesLeft = messageLength;
-  char buffer[messageLength];
-  char* buffPTR = buffer;
-  while (bytesLeft > 0){
-    int bytesRecv = recv(clientSock, buffPTR, messageLength, 0);
-    if (bytesRecv <= 0) exit(-1);
-    bytesLeft = bytesLeft - bytesRecv;
-    buffPTR = buffPTR + bytesRecv;
-  }
-
-  return buffer;
-}
-
-bool SendMessage(int clientSock, string msgToSend){
-
-  // Local Variables
-  int msgLength = msgToSend.length()+1;
-  char msgBuff[msgLength];
-  strcpy(msgBuff, msgToSend.c_str());
-  msgBuff[msgLength-1] = '\0';
-
-  // Since they now know how many bytes to receive, we'll send the userName
-  int msgSent = send(clientSock, msgBuff, msgLength, 0);
-  if (msgSent != msgLength){
-    // Failed to send
-    cerr << "Unable to send username. Aborting program." << endl;
-    exit(-1);
-  }
-
-  return true;
-}
-
