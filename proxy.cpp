@@ -38,9 +38,7 @@ struct sockAddress_in {
 
 // Globals
 const int c_UserNameIndex = 1;
-const unsigned short serverPort = 12050; // up to range 12099 for my own, or 17777
-char* userName;
-int sizeOfUserName = 0;
+unsigned short serverPort; // up to range 12099 for my own, or 17777
 char* hostName;
 int sizeOfHostName = 0;
 
@@ -51,21 +49,24 @@ void runServerRequest (int clientSock);
 
 int main(int argNum, char* argValues[]) {
 
+  // Local Variables
+  char* localArg;
+  int sizeOfArg;
+
   // Need to grab Command-line arguments and convert them to useful types
   // Initialize arguments with proper variables.
-  if (argNum != 2){
+  if (argNum < 3 || argNum > 3){
     // Incorrect number of arguments
     cerr << "Incorrect number of arguments. Please try again." << endl;
     return -1;
   }
-  char* localArg = argValues[c_UserNameIndex];
-  int sizeOfArg = strlen(localArg);
+  localArg = argValues[c_UserNameIndex];
+  sizeOfArg = strlen(localArg);
 
-  // Now we need to split our input into a username and hostname
-  bool foundUserName = false;
+  // Need to store arguments
+  hostName = argValues[1];
+  serverPort = atoi(argValues[2]);
 
-  
-  
   // Create a socket and start server communications.
   int conn_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (conn_socket > 0){
@@ -79,11 +80,6 @@ int main(int argNum, char* argValues[]) {
     exit(-1);
   }
 
-
-  // Housekeeping
-  delete [] userName;
-  delete [] hostName;
-
   // Well done!
   return 0;
 }
@@ -93,10 +89,6 @@ void runServerRequest (int clientSock) {
   // Local variables.
   struct hostent* host;
   int status;
-  string s_userName;
-  stringstream ss;
-  ss << userName;
-  ss >> s_userName;
   int bytesRecv;
 
   // Get host IP and Set proper fields
@@ -116,7 +108,6 @@ void runServerRequest (int clientSock) {
   serverAddress.sin_port = htons(serverPort);
 
   // Now that we have the proper information, we can open a connection.
-
   status = connect(clientSock, (struct sockaddr *) &serverAddress, sizeof(serverAddress));
   if (status < 0) {
     cerr << "Error with the connection." << endl;
@@ -124,9 +115,47 @@ void runServerRequest (int clientSock) {
   }
 
   // Begin handling communication with Server.
+  bool finished = false;
+  int numReturns = 0;
+  string msgToSend = "GET /index.html HTTP/1.0";
+  while (!finished) {
+    getline(cin, msgToSend, '\n');
+    int msgLength = msgToSend.length();
+    char msgBuff[msgLength];
+    strcpy(msgBuff, msgToSend.c_str());
 
+    if (msgToSend == "") {
+      numReturns++;
+      if (numReturns >= 1) {
+	// we're done here
+	finished = true;
+	msgToSend = "\n\n";
+	msgLength = msgToSend.length();
+	strcpy(msgBuff, msgToSend.c_str());
+      }
+    }
+    // Send Data
+    int msgSent = send(clientSock, msgBuff, msgLength, 0);
+    if (msgSent != msgLength){
+      // Failed to send
+      cerr << "Unable to send data. Closing clientSocket: " << clientSock << "." << endl;
+      close(clientSock);
+      exit(-1);
+    }
+  }
+
+  // Read Data
+  int bufferSize = 1024;
+  int bytesLeft = bufferSize;
+  char buffer[bufferSize];
+  char* buffPTR = buffer;
+  int realSize = 0;
+  while ((bytesRecv = recv(clientSock, buffPTR, bufferSize, 0)) > 0){
+    //buffPTR = buffPTR + bytesRecv;
+    //bytesLeft = bytesLeft - bytesRecv;
+    //realSize += bytesRecv;
+    write(1,buffer, bytesRecv);
+  }
+  cout << endl;
   
-  // Close it down!
-  close(clientSock);
-  exit(1);
 }
