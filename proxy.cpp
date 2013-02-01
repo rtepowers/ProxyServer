@@ -113,6 +113,11 @@ void runServerRequest (int clientSock) {
     cerr << "Error with the connection." << endl;
     exit(-1);
   }
+  
+  // Output message to user 
+  cout << "Trying " << inet_ntoa(*(in_addr *)host->h_addr) << "..." << endl;
+  cout << "Connected to " << inet_ntoa(*(in_addr *)host->h_addr) << "." << endl;
+  cout << "Ctrl-c to escape." << endl << endl;
 
   // Begin handling communication with Server.
   bool finished = false;
