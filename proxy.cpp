@@ -130,7 +130,7 @@ void runServerRequest (int clientSock) {
     char msgBuff[msgLength];
     strcpy(msgBuff, msgToSend.c_str());
 
-    if (msgToSend == "\n") {
+    if (msgToSend.length() == 1) {
       numReturns++;
       if (numReturns >= 1) {
 	// we're done here
