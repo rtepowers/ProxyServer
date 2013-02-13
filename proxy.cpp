@@ -125,16 +125,17 @@ void runServerRequest (int clientSock) {
   string msgToSend = "GET /index.html HTTP/1.0";
   while (!finished) {
     getline(cin, msgToSend, '\n');
+    msgToSend.append("\n");
     int msgLength = msgToSend.length();
     char msgBuff[msgLength];
     strcpy(msgBuff, msgToSend.c_str());
 
-    if (msgToSend == "") {
+    if (msgToSend == "\n") {
       numReturns++;
       if (numReturns >= 1) {
 	// we're done here
 	finished = true;
-	msgToSend = "\n\n";
+	msgToSend = "\n";
 	msgLength = msgToSend.length();
 	strcpy(msgBuff, msgToSend.c_str());
       }
