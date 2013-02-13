@@ -190,72 +190,104 @@ void runServerRequest (int clientSock) {
   // TODO - Forward HTTP Message to host.
 
   // Get host IP and Set proper fields
-  
-  hostName.append(clientMsg, clientMsg.find("Host: ")+6, clientMsg.find("\n",clientMsg.find("Host: "))- clientMsg.find("Host: ") - 7);
+ 
+
+}
+
+string getHostName(string httpMsg){
+
+  // Local Variables
+  string hostName = "";
+
+  // Remove spaces
+  for(int i=0; i < httpMsg.length(); i++) {
+    if ( httpMsg[i] == ' ') {
+      httpMsg.replace(i,1, "");
+      i--;
+    }
+  }
+
+  // Store the whole host name
+  hostName.append(httpMsg, 
+		  httpMsg.find("Host: ")+6, 
+		  httpMsg.find("\n",httpMsg.find("Host: ")) - httpMsg.find("Host: ") - 7);
   cout << hostName << endl;
+
+  // Return Host Name
+  return hostName;
+}
+
+bool talkToHost(string hostName, string httpMsg){
+
+  // Local Variables
+  struct hostent* host;
+  struct sockAddress_in serverAddress;
+  char* tmpIP;
+  unsigned long hostIP;
+  int status = 0;
+  int hostSock;
+  unsigned short hostPort = 80;
+
+  // Get Host IP Address
   host = gethostbyname(hostName.c_str());
   if (!host) {
-    cerr << "Unable to resolve hostname's ip address. Exiting..." << endl;
-    return;
+    cerr << "Unable to resolve hostname's IP Address. Exiting..." << endl;
+    return false;
   }
-  char* tmpIP = inet_ntoa( *(struct in_addr *)host->h_addr_list[0]);
-  cout << tmpIP << endl;
-  unsigned long serverIP;
-  status = inet_pton(AF_INET, tmpIP,(void*) &serverIP);
+  tmpIP = inet_ntoa(*(struct in_addr *)host ->h_addr_list[0]);
+  status = inet_pton(AF_INET, tmpIP, (void*) &hostIP);
   if (status <= 0) exit(-1);
+  status = 0;
 
-  int conn_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-
-  struct sockAddress_in serverAddress;
+  // Establish socket and address to talk to Host
+  hostSock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   serverAddress.sin_family = AF_INET;
-  serverAddress.sin_addr.s_addr = serverIP ;
-  serverAddress.sin_port = htons(80);
+  serverAddress.sin_addr.s_addr = hostIP;
+  serverAddress.sin_port = htons(hostPort);
 
-  // Now that we have the proper information, we can open a connection.
-  status = connect(conn_socket, (struct sockaddr *) &serverAddress, sizeof(serverAddress));
+  // Now we have the right information, let's open a connection to the host.
+  status = connect(hostSock, (struct sockaddr *) &serverAddress, sizeof(serverAddress));
   if (status < 0) {
-    cerr << "Error with the connection." << endl;
+    cerr << "Error opening host connection." << endl;
     exit(-1);
   }
 
-  // Forward message
-  int msgLength = clientMsg.length();
+  // Forward Message
+  if (!sendMessage(httpMsg, hostSock)){
+    exit(-1);
+  }
+  // Receive Response
+
+
+
+  // Great Success!
+  return true;
+}
+
+bool sendMessage (string messageToSend, int sendSock) {
+
+  // Local Variables
+  int msgLength = messageToSend.length();
+  int msgSent = 0;
   char msgBuff[msgLength];
-  strcpy(msgBuff, clientMsg.c_str());
 
-  // Since they now know how many bytes to receive, we'll send the userName
-  int msgSent = send(conn_socket, msgBuff, msgLength, 0);
-  if (msgSent != msgLength){
-    // Failed to send
-    cerr << "Unable to send username. Aborting program." << endl;
-    exit(-1);
+  // Transfer message.
+  strcpy(msgBuff, messageToSend.c_str());
+
+  // Send message
+  if ((msgSent = send(sendSock, msgBuff, msgLength, 0)) != msgLength){
+    cerr << "Unable to send message. Aborting connection." << endl;
+    return false;
   }
+  
+  return true;
+}
 
-  char* buffPTR2;
-  char buffer2[bufferSize];
-  buffPTR2 = buffer2;
+string recvMessage (int recvSock) {
+
+  // Local Variables
   string responseMsg = "";
-  while ((bytesRecv = recv(conn_socket, buffPTR2, bufferSize, 0)) > 0){
-    responseMsg.append(buffPTR2, bytesRecv);
-  }
-  cout << responseMsg << endl;
 
-  // Connect stdout and stderr to socket.
-  int dupOut_status = dup2(clientSock, 1);
-  if (dupOut_status < 0 ) {
-    cerr << "Error connecting stdout to socket." << endl;
-    exit(-1);
-  }
-  int dupErr_status = dup2(clientSock, 2);
-  if (dupErr_status < 0 ) {
-    cerr << "Error connecting stderr to socket." << endl;
-    exit(-1);
-  }
 
-  char responseBuff2[responseMsg.length()];
-  strcpy(responseBuff2, responseMsg.c_str());
-  write(1, responseBuff2, responseMsg.length());
-  //msgSent = send(clientSock, responseBuff2, responseMsg.length(), 0);
-  close(conn_socket);
-  close(clientSock);
+  return responseMsg;
 }
