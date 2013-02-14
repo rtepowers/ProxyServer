@@ -135,7 +135,7 @@ void runServerRequest (int clientSock) {
       if (numReturns >= 1) {
 	// we're done here
 	finished = true;
-	msgToSend = "\n";
+	msgToSend = "\r\n\r\n";
 	msgLength = msgToSend.length();
 	strcpy(msgBuff, msgToSend.c_str());
       }
