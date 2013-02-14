@@ -61,6 +61,26 @@ void runServerRequest (int clientSock);
 // pre: socket must exist and be open.
 // post: none
 
+string getHostName(string httpMsg);
+// Function searches message for host informaion.
+// pre: none
+// post: none
+
+string talkToHost(string hostName, string httpMsg);
+// Function initiates communication with a particular host. Returns host response.
+// pre: hostName should be resolvable.
+// post: returns response string
+
+bool sendMessage (string messageToSend, int sendSock);
+// Function sends string to intended socket. Will return false if failure occurs
+// pre: socket should exist.
+// post: none
+
+string recvMessage (int recvSock);
+// Function listens to socket for data. Expects <CRLF CRLF> delimiter for expiration.
+// pre: socket should exist.
+// post: none
+
 int main(int argNum, char* argValues[]) {
 
   // Local Variables
@@ -167,30 +187,21 @@ void runServerRequest (int clientSock) {
   // Local variables.
   struct hostent* host;
   string hostName = "";
+  string clientMsg;
   int status;
   int bytesRecv;
   
   // Begin handling communication with Server.
-
   // Receive HTTP Message from client.
-  int bufferSize = 2048;
-  int bytesLeft = bufferSize;
-  string clientMsg = "";
-  char buffer[bufferSize];
-  char* buffPTR = buffer;
-  while ((bytesRecv = recv(clientSock, buffPTR, bufferSize, 0)) > 0){
-    clientMsg.append(buffPTR, bytesRecv);
-    if (clientMsg[clientMsg.length()-2] == '\n' && clientMsg[clientMsg.length()-1] == '\n') {
-      break;
-    }
-  }
-  cout << clientMsg << endl;
+  clientMsg = recvMessage(clientSock);
   
-  
-  // TODO - Forward HTTP Message to host.
+  // Forward HTTP Message to host.
+  string responseMsg = talkToHost(getHostName(clientMsg), clientMsg);
 
-  // Get host IP and Set proper fields
- 
+  // Return HTTP Message to client.
+  if (!sendMessage(responseMsg, clientSock)) {
+    cerr << "Failed to send message back." << endl;
+  }
 
 }
 
@@ -199,30 +210,36 @@ string getHostName(string httpMsg){
   // Local Variables
   string hostName = "";
 
-  // Remove spaces
-  for(int i=0; i < httpMsg.length(); i++) {
-    if ( httpMsg[i] == ' ') {
-      httpMsg.replace(i,1, "");
-      i--;
-    }
-  }
-
   // Store the whole host name
   hostName.append(httpMsg, 
 		  httpMsg.find("Host: ")+6, 
-		  httpMsg.find("\n",httpMsg.find("Host: ")) - httpMsg.find("Host: ") - 7);
-  cout << hostName << endl;
+		  httpMsg.find("\n",httpMsg.find("Host: ")) - httpMsg.find("Host: ") - 6);
+
+  // Remove spaces
+  for(int i=0; i < hostName.length(); i++) {
+    if ( hostName[i] == ' ') {
+      hostName.replace(i,1, "");
+      i--;
+    } else if (hostName[i] == '\r') {
+      hostName.replace(i,1, "");
+      i--;
+    } else if (hostName[i] == '\n') {
+      hostName.replace(i,1, "");
+      i--;
+    }
+  }
 
   // Return Host Name
   return hostName;
 }
 
-bool talkToHost(string hostName, string httpMsg){
+string talkToHost(string hostName, string httpMsg){
 
   // Local Variables
   struct hostent* host;
   struct sockAddress_in serverAddress;
   char* tmpIP;
+  string responseMsg = "";
   unsigned long hostIP;
   int status = 0;
   int hostSock;
@@ -232,9 +249,10 @@ bool talkToHost(string hostName, string httpMsg){
   host = gethostbyname(hostName.c_str());
   if (!host) {
     cerr << "Unable to resolve hostname's IP Address. Exiting..." << endl;
-    return false;
+    return responseMsg;
   }
   tmpIP = inet_ntoa(*(struct in_addr *)host ->h_addr_list[0]);
+  cout << "Host: ---" << hostName << endl << "IP: -----" << tmpIP << endl;
   status = inet_pton(AF_INET, tmpIP, (void*) &hostIP);
   if (status <= 0) exit(-1);
   status = 0;
@@ -254,14 +272,18 @@ bool talkToHost(string hostName, string httpMsg){
 
   // Forward Message
   if (!sendMessage(httpMsg, hostSock)){
+    cerr << "There was an error attempting to send information to host." << endl;
     exit(-1);
   }
   // Receive Response
-
-
+  responseMsg = recvMessage(hostSock);
+  if (responseMsg == "") {
+    cerr << "Was unable to receive information from host." << endl;
+    exit(-1);
+  }
 
   // Great Success!
-  return true;
+  return responseMsg;
 }
 
 bool sendMessage (string messageToSend, int sendSock) {
@@ -275,7 +297,9 @@ bool sendMessage (string messageToSend, int sendSock) {
   strcpy(msgBuff, messageToSend.c_str());
 
   // Send message
-  if ((msgSent = send(sendSock, msgBuff, msgLength, 0)) != msgLength){
+  msgSent = send(sendSock, msgBuff, msgLength, 0);
+  if (msgSent != msgLength){
+    
     cerr << "Unable to send message. Aborting connection." << endl;
     return false;
   }
@@ -287,7 +311,30 @@ string recvMessage (int recvSock) {
 
   // Local Variables
   string responseMsg = "";
+  int bytesRecv;
+  
+  // Begin handling communication with Server.
+  int bufferSize = 1024;
+  int bytesLeft = bufferSize;
+  string clientMsg = "";
+  char buffer[bufferSize];
+  char* buffPTR = buffer;
+  while (true){
+    if (responseMsg.length() > 4){
+      if (responseMsg[responseMsg.length()-4] == '\r'
+	  && responseMsg[responseMsg.length()-3] == '\n'
+	  && responseMsg[responseMsg.length()-2] == '\r'
+	  && responseMsg[responseMsg.length()-1] == '\n') {
+	break;
+      }
+    }
+    bytesRecv = recv(recvSock, buffPTR, bufferSize, 0);
+    if (bytesRecv <= 0) {
+      break;
+    }
+    responseMsg.append(buffPTR, bytesRecv);
 
-
+  }
+  cout << responseMsg << endl;
   return responseMsg;
 }
