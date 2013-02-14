@@ -1,6 +1,6 @@
 // Author: Ray Powers
 // Date: Jan 31, 2013
-// Filename: proxy.cpp
+// Filename: tmpTelnet.cpp
 
 // DESCRIPTION: This program will provide a simple telnet-like clone
 
