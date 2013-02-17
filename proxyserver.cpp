@@ -2,7 +2,7 @@
 // DATE: February 12, 2013
 // FILE: ProxyServer.cpp
 
-// DESCRIPTION: This program will server as a caching proxy for multiple clients.
+// DESCRIPTION: This program will serve as a caching proxy for multiple clients.
 
 #include<iostream>
 #include<sstream>
@@ -130,7 +130,7 @@ int main(int argNum, char* argValues[]) {
   
     // Accept connections
   while (true) {
-    // Accept connections
+    // Accept connections. No seriously, ACCEPT THEM!
     struct sockaddr_in clientAddress;
     socklen_t addrLen = sizeof(clientAddress);
     int clientSocket = accept(conn_socket, (struct sockaddr*) &clientAddress, &addrLen);
@@ -153,7 +153,7 @@ int main(int argNum, char* argValues[]) {
     
   }
   
-  // Well done!
+  // Well done! Your computer managed to finish the infinite loop.
   return 0;
 }
 
