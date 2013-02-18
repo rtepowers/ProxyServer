@@ -220,8 +220,13 @@ void runServerRequest (int clientSock) {
   // Receive HTTP Message from client.
   clientMsg = recvMessage(clientSock);
 
+  cout << clientMsg <<endl;
+  cout << scrubClientMsg(clientMsg) << endl;
+
   // Forward HTTP Message to host.
   string responseMsg = talkToHost(getHostName(clientMsg), scrubClientMsg(clientMsg));
+
+  cout << responseMsg << endl;
 
   // Return HTTP Message to client.
   if (!sendMessage(responseMsg, clientSock)) {
@@ -390,6 +395,9 @@ string getURL(string httpMsg) {
 	       httpMsg.find("http://") + 11, 
 	       httpMsg.find(" HTTP/1.0") -  (httpMsg.find("http://") + 11));
   } else {
+    url.append(httpMsg, 
+	       httpMsg.find("GET ") + 4, 
+	       httpMsg.find(" HTTP/1.0") -  (httpMsg.find("GET ") + 4));
   }
 
   
@@ -435,9 +443,10 @@ string scrubClientMsg (string httpMsg) {
 
   betterMsg.append(makeGETrequest(getURL(httpMsg)));
   betterMsg.append("Host: " + getHostName(httpMsg) + "\r\n");
+  betterMsg.append("Accept: text/html, application/xhtml+xml, application/xml;q=0.9,*/*;q=0.8\r\n");
+  betterMsg.append("Accept-Language: en-US,en;q=.5\r\n");
+  betterMsg.append("Connection: Close\r\n");
   betterMsg.append(getTermSig());
-
-  cout << betterMsg << endl;
 
   return betterMsg;
 }
