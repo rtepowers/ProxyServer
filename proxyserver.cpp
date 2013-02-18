@@ -16,8 +16,10 @@
 #include<unistd.h>
 #include<netdb.h>
 #include<pthread.h>
+#include<tr1/unordered_map>
 
 using namespace std;
+using namespace str::tr1;
 
 // Data Structures
 struct sockAddr {
@@ -37,10 +39,8 @@ struct sockAddress_in {
 };
 
 struct threadArgs {
-	int clientSock;
+  int clientSock;
 };
-
-// TODO - CACHE OBJECT HERE
 
 // Globals
 const int MAXPENDING = 40;
@@ -109,10 +109,8 @@ string scrubClientMsg (string httpMsg);
 int main(int argNum, char* argValues[]) {
 
   // Local Variables
- 
-
-  // TODO - Initialize Cache System HERE
-
+  unordered_map<string, string> cacheMap;
+  
 
   // Need to grab Command-line arguments and convert them to useful types
   // Initialize arguments with proper variables.
@@ -220,13 +218,11 @@ void runServerRequest (int clientSock) {
   // Receive HTTP Message from client.
   clientMsg = recvMessage(clientSock);
 
-  cout << clientMsg <<endl;
-  cout << scrubClientMsg(clientMsg) << endl;
+  cout << clientMsg << endl;
+  cout <<  scrubClientMsg(clientMsg) << endl;
 
   // Forward HTTP Message to host.
   string responseMsg = talkToHost(getHostName(clientMsg), scrubClientMsg(clientMsg));
-
-  cout << responseMsg << endl;
 
   // Return HTTP Message to client.
   if (!sendMessage(responseMsg, clientSock)) {
@@ -296,7 +292,7 @@ string talkToHost(string hostName, string httpMsg){
   status = connect(hostSock, (struct sockaddr *) &serverAddress, sizeof(serverAddress));
   if (status < 0) {
     cerr << "Error opening host connection." << endl;
-    exit(-1);
+    return responseMsg;
   }
 
   // Forward Message
@@ -308,7 +304,7 @@ string talkToHost(string hostName, string httpMsg){
   responseMsg = recvMessage(hostSock);
   if (responseMsg == "") {
     cerr << "Was unable to receive information from host." << endl;
-    exit(-1);
+    return responseMsg;
   }
 
   // Great Success!
@@ -388,12 +384,12 @@ string getURL(string httpMsg) {
   // Process HTTP message
   if (httpMsg.find("https://")){
     url.append(httpMsg, 
-	       httpMsg.find("https://") + 12, 
-	       httpMsg.find(" HTTP/1.0") -  (httpMsg.find("https://") + 12));
+	       httpMsg.find("GET https://") + 12, 
+	       httpMsg.find(" HTTP/1.0") -  (httpMsg.find("GET https://") + 12));
   } else if (httpMsg.find("http://")) {
     url.append(httpMsg, 
-	       httpMsg.find("http://") + 11, 
-	       httpMsg.find(" HTTP/1.0") -  (httpMsg.find("http://") + 11));
+	       httpMsg.find("GET http://") + 11, 
+	       httpMsg.find(" HTTP/1.0") -  (httpMsg.find("GET http://") + 11));
   } else {
     url.append(httpMsg, 
 	       httpMsg.find("GET ") + 4, 
@@ -439,14 +435,25 @@ string getResponseCode (string httpMsg) {
 string scrubClientMsg (string httpMsg) {
 
   // Local variabes
-  string betterMsg = "";
-
-  betterMsg.append(makeGETrequest(getURL(httpMsg)));
-  betterMsg.append("Host: " + getHostName(httpMsg) + "\r\n");
-  betterMsg.append("Accept: text/html, application/xhtml+xml, application/xml;q=0.9,*/*;q=0.8\r\n");
-  betterMsg.append("Accept-Language: en-US,en;q=.5\r\n");
-  betterMsg.append("Connection: Close\r\n");
-  betterMsg.append(getTermSig());
+  string betterMsg = httpMsg;
+  
+  //betterMsg.replace(betterMsg.find(""),1,"");
 
   return betterMsg;
+}
+
+int getMessageLength(string httpMsg) {
+
+  // Local Variables
+  int msgLength = 0;
+
+  return msgLength;
+}
+
+void addToCache(string httpMsg) {
+
+}
+
+string checkCache(string httpMsg) {
+
 }
