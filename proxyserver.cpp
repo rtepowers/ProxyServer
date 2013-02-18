@@ -101,6 +101,11 @@ string makeGETrequest(string urlPath);
 // pre: none
 // post: none
 
+string scrubClientMsg (string httpMsg);
+// Function removes unecessary Header information
+// pre: none
+// post: none
+
 int main(int argNum, char* argValues[]) {
 
   // Local Variables
@@ -214,9 +219,9 @@ void runServerRequest (int clientSock) {
   // Begin handling communication with Server.
   // Receive HTTP Message from client.
   clientMsg = recvMessage(clientSock);
-  
+
   // Forward HTTP Message to host.
-  string responseMsg = talkToHost(getHostName(clientMsg), clientMsg);
+  string responseMsg = talkToHost(getHostName(clientMsg), scrubClientMsg(clientMsg));
 
   // Return HTTP Message to client.
   if (!sendMessage(responseMsg, clientSock)) {
@@ -272,7 +277,6 @@ string talkToHost(string hostName, string httpMsg){
     return responseMsg;
   }
   tmpIP = inet_ntoa(*(struct in_addr *)host ->h_addr_list[0]);
-  cout << "Host: ---" << hostName << endl << "IP: -----" << tmpIP << endl;
   status = inet_pton(AF_INET, tmpIP, (void*) &hostIP);
   if (status <= 0) exit(-1);
   status = 0;
@@ -349,13 +353,12 @@ string recvMessage (int recvSock) {
       }
     }
     bytesRecv = recv(recvSock, buffPTR, bufferSize, 0);
-    if (bytesRecv = 0) {
+    if (bytesRecv <= 0) {
       break;
     }
     responseMsg.append(buffPTR, bytesRecv);
 
   }
-  cout << responseMsg << endl;
   return responseMsg;
 }
 
@@ -375,7 +378,22 @@ string makeGETrequest(string urlPath) {
 string getURL(string httpMsg) {
 
   // Local Variables
-  string
+  string url = "";
+
+  // Process HTTP message
+  if (httpMsg.find("https://")){
+    url.append(httpMsg, 
+	       httpMsg.find("https://") + 12, 
+	       httpMsg.find(" HTTP/1.0") -  (httpMsg.find("https://") + 12));
+  } else if (httpMsg.find("http://")) {
+    url.append(httpMsg, 
+	       httpMsg.find("http://") + 11, 
+	       httpMsg.find(" HTTP/1.0") -  (httpMsg.find("http://") + 11));
+  } else {
+  }
+
+  
+  return url;
 }
 
 string getTermSig() {
@@ -393,15 +411,15 @@ string getResponseCode (string httpMsg) {
 		  3);
 
   // Remove spaces
-  for(int i=0; i < hostName.length(); i++) {
-    if ( hostName[i] == ' ') {
-      hostName.replace(i,1, "");
+  for(int i=0; i < responseCode.length(); i++) {
+    if ( responseCode[i] == ' ') {
+      responseCode.replace(i,1, "");
       i--;
-    } else if (hostName[i] == '\r') {
-      hostName.replace(i,1, "");
+    } else if (responseCode[i] == '\r') {
+      responseCode.replace(i,1, "");
       i--;
-    } else if (hostName[i] == '\n') {
-      hostName.replace(i,1, "");
+    } else if (responseCode[i] == '\n') {
+      responseCode.replace(i,1, "");
       i--;
     }
   }
@@ -410,3 +428,16 @@ string getResponseCode (string httpMsg) {
   return responseCode;
 }
 
+string scrubClientMsg (string httpMsg) {
+
+  // Local variabes
+  string betterMsg = "";
+
+  betterMsg.append(makeGETrequest(getURL(httpMsg)));
+  betterMsg.append("Host: " + getHostName(httpMsg) + "\r\n");
+  betterMsg.append(getTermSig());
+
+  cout << betterMsg << endl;
+
+  return betterMsg;
+}
