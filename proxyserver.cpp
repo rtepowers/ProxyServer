@@ -81,6 +81,26 @@ string recvMessage (int recvSock);
 // pre: socket should exist.
 // post: none
 
+string getResponseCode (string httpMsg);
+// Function pulls HTTP response code from message received.
+// pre: Message should be  a response message.
+// post: none
+
+string getTermSig();
+// Function returns a typical HTTP control <CRLF>
+// pre: none
+// post: none
+
+string getURL(string httpMsg);
+// Function extracts the URL from a HTTP request.
+// pre: none
+// post: none
+
+string makeGETrequest(string urlPath);
+// Function builds a get request from a proper URL path.
+// pre: none
+// post: none
+
 int main(int argNum, char* argValues[]) {
 
   // Local Variables
@@ -329,7 +349,7 @@ string recvMessage (int recvSock) {
       }
     }
     bytesRecv = recv(recvSock, buffPTR, bufferSize, 0);
-    if (bytesRecv <= 0) {
+    if (bytesRecv = 0) {
       break;
     }
     responseMsg.append(buffPTR, bytesRecv);
@@ -338,3 +358,55 @@ string recvMessage (int recvSock) {
   cout << responseMsg << endl;
   return responseMsg;
 }
+
+string makeGETrequest(string urlPath) {
+
+  // Local Variables
+  string request = "";
+
+  // Build request.
+  request.append("GET ");
+  request.append(urlPath);
+  request.append(" HTTP/1.0\r\n");
+
+  return request;
+}
+
+string getURL(string httpMsg) {
+
+  // Local Variables
+  string
+}
+
+string getTermSig() {
+  return "\r\n";
+}
+
+string getResponseCode (string httpMsg) {
+  
+  // Local Variables
+  string responseCode = "";
+
+  // Store the whole host name
+  responseCode.append(httpMsg, 
+		  httpMsg.find("HTTP/1.0 ")+9, 
+		  3);
+
+  // Remove spaces
+  for(int i=0; i < hostName.length(); i++) {
+    if ( hostName[i] == ' ') {
+      hostName.replace(i,1, "");
+      i--;
+    } else if (hostName[i] == '\r') {
+      hostName.replace(i,1, "");
+      i--;
+    } else if (hostName[i] == '\n') {
+      hostName.replace(i,1, "");
+      i--;
+    }
+  }
+
+  // Send it back
+  return responseCode;
+}
+
