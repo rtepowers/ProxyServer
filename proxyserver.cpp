@@ -19,7 +19,6 @@
 #include<tr1/unordered_map>
 
 using namespace std;
-using namespace str::tr1;
 
 // Data Structures
 struct sockAddr {
@@ -109,7 +108,7 @@ string scrubClientMsg (string httpMsg);
 int main(int argNum, char* argValues[]) {
 
   // Local Variables
-  unordered_map<string, string> cacheMap;
+  tr1::unordered_map<string, string> cacheMap;
   
 
   // Need to grab Command-line arguments and convert them to useful types
