@@ -42,11 +42,13 @@ struct threadArgs {
 };
 
 // Globals
-const int MAXPENDING = 40;
-const int c_UserNameIndex = 1;
+const int MAXPENDING = 30;
 unsigned short serverPort; // up to range 12099 for my own, or 17777
 pthread_mutex_t cacheLock;
 int status = pthread_mutex_init(&cacheLock, NULL);
+tr1::unordered_map<string, string> cacheMap;
+int numCacheItems = 0;
+const int MAXCACHESIZE = 30;
 
 
 // Function Prototypes
@@ -105,10 +107,22 @@ string scrubClientMsg (string httpMsg);
 // pre: none
 // post: none
 
+void addToCache(string httpRequest, string httpResponse);
+// Function adds entry to cache table
+// pre: none
+// post: none
+
+string checkCache(string httpRequest);
+// Function gets value from cache.
+// pre: none
+// post: none
+
+string cacheCheckingMsg(string httpRequest, string httpResponse);
+// Function creates a message to check a cache item's elements.
+
 int main(int argNum, char* argValues[]) {
 
   // Local Variables
-  tr1::unordered_map<string, string> cacheMap;
   
 
   // Need to grab Command-line arguments and convert them to useful types
@@ -158,7 +172,7 @@ int main(int argNum, char* argValues[]) {
     int clientSocket = accept(conn_socket, (struct sockaddr*) &clientAddress, &addrLen);
     if (clientSocket < 0) {
       cerr << "Error accepting connections." << endl;
-      exit(-1);
+      continue;
     }
 
     // Create child thread to handle process
@@ -192,8 +206,11 @@ void* clientThread(void* args_p){
   pthread_detach(pthread_self());
 
   // Communicate with Client
+  try {
   runServerRequest(clientSock);
-
+  } catch(Exception) {
+    pthread_exit(NULL);
+  }
   // Close Client socket
   close(clientSock);
 
@@ -218,7 +235,10 @@ void runServerRequest (int clientSock) {
   clientMsg = recvMessage(clientSock);
 
   // Forward HTTP Message to host.
-  string responseMsg = talkToHost(getHostName(clientMsg), clientMsg);
+  string responseMsg = "";
+  // Wasn't in Cache, get proper message from Host
+  responseMsg = talkToHost(getHostName(clientMsg), clientMsg);
+
 
   // Return HTTP Message to client.
   if (!sendMessage(responseMsg, clientSock)) {
@@ -339,24 +359,31 @@ string recvMessage (int recvSock) {
   int bufferSize = 1024;
   int bytesLeft = bufferSize;
   string clientMsg = "";
-  char buffer[bufferSize];
+  int totalSize = 0;
+  char buffer[10000000];
   char* buffPTR = buffer;
+  memset(buffPTR, 0, 10000000);
   while (true){
-    if (responseMsg.length() > 4){
-      if (responseMsg[responseMsg.length()-4] == '\r'
-	  && responseMsg[responseMsg.length()-3] == '\n'
-	  && responseMsg[responseMsg.length()-2] == '\r'
-	  && responseMsg[responseMsg.length()-1] == '\n') {
+    if (totalSize > 4){
+      if (buffer[totalSize-4] == '\r'
+	  && buffer[totalSize-3] == '\n'
+	  && buffer[totalSize-2] == '\r'
+	  && buffer[totalSize-1] == '\n') {
 	break;
       }
     }
-    bytesRecv = recv(recvSock, buffPTR, bufferSize, 0);
+    bytesRecv = recv(recvSock, (void*) buffPTR, bufferSize, 0);
     if (bytesRecv <= 0) {
       break;
     }
-    responseMsg.append(buffPTR, bytesRecv);
+    totalSize += bytesRecv;
+    buffPTR += bytesRecv;
+    //responseMsg.append(buffPTR, bytesRecv);
 
   }
+
+  buffer[totalSize] = '\0';
+  responseMsg.append(buffer, totalSize);
   return responseMsg;
 }
 
@@ -432,25 +459,43 @@ string getResponseCode (string httpMsg) {
 string scrubClientMsg (string httpMsg) {
 
   // Local variabes
-  string betterMsg = httpMsg;
+  string betterMsg = "";
   
-  //betterMsg.replace(betterMsg.find(""),1,"");
+  betterMsg.append(makeGETrequest(getURL(httpMsg)));
 
   return betterMsg;
 }
 
-int getMessageLength(string httpMsg) {
+void addToCache(string httpRequest, string httpResponse) {
+  pthread_mutex_lock(&cacheLock);
+  if (numCacheItems != MAXCACHESIZE) {
+    cacheMap.insert (make_pair<string, string> (scrubClientMsg(httpRequest), httpResponse));
+  } else {
+    // Perform RR
+    cacheMap.erase(cacheMap.begin());
+    cacheMap.insert (make_pair<string, string> (scrubClientMsg(httpRequest), httpResponse));
+  }
+  pthread_mutex_unlock(&cacheLock);
 
-  // Local Variables
-  int msgLength = 0;
-
-  return msgLength;
 }
 
-void addToCache(string httpMsg) {
-
+string checkCache(string httpRequest) {
+  //pthread_mutex_lock(&cacheLock);
+  tr1::unordered_map<string,string>::const_iterator foundItem = cacheMap.find(scrubClientMsg(httpRequest));
+  if (foundItem != cacheMap.end() ) {
+    return foundItem->second;
+  } else return "";
+  //pthread_mutex_unlock(&cacheLock);
 }
 
-string checkCache(string httpMsg) {
+string cacheCheckingMsg(string httpRequest, string httpResponse) {
 
+  string cacheCheck = "";
+
+  cacheCheck.append(httpRequest);
+  cacheCheck.append("If-Modified-Since: ");
+  cacheCheck.append(httpResponse,
+		    httpResponse.find("Date: ") + 6,
+		    httpResponse.find("\n", httpResponse.find("Date: ")) - httpResponse.find("Date: ") + 6);
+  cacheCheck.append("\r\n\r\n");
 }
