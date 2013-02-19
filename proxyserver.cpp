@@ -65,7 +65,7 @@ string getHostName(string httpMsg);
 // pre: none
 // post: none
 
-string talkToHost(string hostName, string httpMsg);
+int talkToHost(string hostName, string httpMsg, int httpMsgLength, string reply);
 // Function initiates communication with a particular host. Returns host response.
 // pre: hostName should be resolvable.
 // post: returns response string
@@ -75,8 +75,13 @@ bool sendMessage (string messageToSend, int sendSock);
 // pre: socket should exist.
 // post: none
 
-string recvMessage (int recvSock);
-// Function listens to socket for data. Expects <CRLF CRLF> delimiter for expiration.
+bool sendMessage (string messageToSend, int sizeOfMessage, int sendSock);
+// Function sends string to intended socket. Will return false if failure occurs
+// pre: socket should exist.
+// post: none
+
+int recvMessage (string httpMsg, int recvSock);
+// Function listens to socket for data.
 // pre: socket should exist.
 // post: none
 
@@ -102,6 +107,11 @@ string makeGETrequest(string urlPath);
 
 string scrubClientMsg (string httpMsg);
 // Function removes unecessary Header information
+// pre: none
+// post: none
+
+int getMessageLength(string httpMsg);
+// Function parses httpMsg for content length.
 // pre: none
 // post: none
 
@@ -201,27 +211,26 @@ void* clientThread(void* args_p){
   pthread_exit(NULL);
 }
 
-
-
-
 void runServerRequest (int clientSock) {
   
   // Local variables.
   struct hostent* host;
   string hostName = "";
-  string clientMsg;
+  string clientMsg = "";
   int status;
-  int bytesRecv;
+  int bytesRecv = 0;
   
   // Begin handling communication with Server.
   // Receive HTTP Message from client.
-  clientMsg = recvMessage(clientSock);
+  bytesRecv = recvMessage(clientMsg, clientSock);
 
   cout << clientMsg << endl;
-  cout <<  scrubClientMsg(clientMsg) << endl;
 
   // Forward HTTP Message to host.
-  string responseMsg = talkToHost(getHostName(clientMsg), scrubClientMsg(clientMsg));
+  string responseMsg = "";
+  int responseLength = talkToHost(getHostName(clientMsg), clientMsg, bytesRecv, responseMsg);
+
+  cout << responseMsg << endl;
 
   // Return HTTP Message to client.
   if (!sendMessage(responseMsg, clientSock)) {
@@ -236,9 +245,13 @@ string getHostName(string httpMsg){
   string hostName = "";
 
   // Store the whole host name
+  if (httpMsg.find("Host: ") != 0) {
   hostName.append(httpMsg, 
 		  httpMsg.find("Host: ")+6, 
 		  httpMsg.find("\n",httpMsg.find("Host: ")) - httpMsg.find("Host: ") - 6);
+  } else {
+    return hostName;
+  }
 
   // Remove spaces
   for(int i=0; i < hostName.length(); i++) {
@@ -258,7 +271,7 @@ string getHostName(string httpMsg){
   return hostName;
 }
 
-string talkToHost(string hostName, string httpMsg){
+int talkToHost(string hostName, string httpMsg, int httpMsgLength, string reply){
 
   // Local Variables
   struct hostent* host;
@@ -274,7 +287,7 @@ string talkToHost(string hostName, string httpMsg){
   host = gethostbyname(hostName.c_str());
   if (!host) {
     cerr << "Unable to resolve hostname's IP Address. Exiting..." << endl;
-    return responseMsg;
+    return 0;
   }
   tmpIP = inet_ntoa(*(struct in_addr *)host ->h_addr_list[0]);
   status = inet_pton(AF_INET, tmpIP, (void*) &hostIP);
@@ -291,29 +304,29 @@ string talkToHost(string hostName, string httpMsg){
   status = connect(hostSock, (struct sockaddr *) &serverAddress, sizeof(serverAddress));
   if (status < 0) {
     cerr << "Error opening host connection." << endl;
-    return responseMsg;
+    return 0;
   }
 
   // Forward Message
-  if (!sendMessage(httpMsg, hostSock)){
+  if (!sendMessage(httpMsg, httpMsgLength, hostSock)){
     cerr << "There was an error attempting to send information to host." << endl;
-    exit(-1);
+    return 0;
   }
   // Receive Response
-  responseMsg = recvMessage(hostSock);
-  if (responseMsg == "") {
+  int responseLength = recvMessage(responseMsg, hostSock);
+  if (responseLength == 0) {
     cerr << "Was unable to receive information from host." << endl;
-    return responseMsg;
+    return 0;
   }
 
   // Great Success!
-  return responseMsg;
+  return responseLength;
 }
 
-bool sendMessage (string messageToSend, int sendSock) {
+bool sendMessage (string messageToSend, int sizeOfMessage, int sendSock) {
 
   // Local Variables
-  int msgLength = messageToSend.length();
+  int msgLength = sizeOfMessage;
   int msgSent = 0;
   char msgBuff[msgLength];
 
@@ -331,15 +344,19 @@ bool sendMessage (string messageToSend, int sendSock) {
   return true;
 }
 
-string recvMessage (int recvSock) {
+int recvMessage (string &msgReceived, int recvSock) {
 
   // Local Variables
   string responseMsg = "";
   int bytesRecv;
+  int contentSize = 0;
+  char* restOfMessage;
+
   
   // Begin handling communication with Server.
   int bufferSize = 1024;
   int bytesLeft = bufferSize;
+  int bytesReceived = 0;
   string clientMsg = "";
   char buffer[bufferSize];
   char* buffPTR = buffer;
@@ -353,13 +370,33 @@ string recvMessage (int recvSock) {
       }
     }
     bytesRecv = recv(recvSock, buffPTR, bufferSize, 0);
-    if (bytesRecv <= 0) {
+    if (bytesRecv == 0) {
+      break;
+    } else if (bytesRecv < 0){
+      cerr << "Problem occured receiving data" << endl;
       break;
     }
     responseMsg.append(buffPTR, bytesRecv);
-
+    bytesReceived += bytesRecv;
   }
-  return responseMsg;
+
+  // If we still have data
+  contentSize = getMessageLength(responseMsg);
+  if (contentSize != 0) {
+    bytesLeft = contentSize;
+    char newBuffer[bytesLeft];
+    buffPTR = newBuffer;
+    while ((bytesRecv = recv(recvSock, buffPTR, bytesLeft, 0)) > 0) {
+      responseMsg.append(newBuffer, bytesRecv);
+      bytesLeft = bytesLeft - bytesRecv;
+    }
+  }
+
+
+  msgReceived = responseMsg;
+
+
+  return (bytesReceived + contentSize);
 }
 
 string makeGETrequest(string urlPath) {
@@ -435,8 +472,7 @@ string scrubClientMsg (string httpMsg) {
 
   // Local variabes
   string betterMsg = httpMsg;
-  
-  //betterMsg.replace(betterMsg.find(""),1,"");
+ 
 
   return betterMsg;
 }
@@ -445,7 +481,18 @@ int getMessageLength(string httpMsg) {
 
   // Local Variables
   int msgLength = 0;
+  string textLength = "";
 
+  // parse httpMsg
+  if (httpMsg.find("Content-Length: ") != 0) {
+    textLength.append(httpMsg,
+		      httpMsg.find("Content-Length: ")+ 16,
+		      httpMsg.find("\n", httpMsg.find("Content-Length: "))-3);
+  
+    
+    stringstream ss(textLength);
+    ss >> msgLength;
+  }
   return msgLength;
 }
 
