@@ -43,7 +43,7 @@ struct threadArgs {
 };
 
 // Globals
-const int MAXPENDING = 30;
+const int MAXPENDING = 10;
 unsigned short serverPort; // up to range 12099 for my own, or 17777
 pthread_mutex_t cacheLock;
 int status = pthread_mutex_init(&cacheLock, NULL);
@@ -173,7 +173,7 @@ int main(int argNum, char* argValues[]) {
     int clientSocket = accept(conn_socket, (struct sockaddr*) &clientAddress, &addrLen);
     if (clientSocket < 0) {
       cerr << "Error accepting connections." << endl;
-      continue;
+      return 0;
     }
 
     // Create child thread to handle process
@@ -236,14 +236,12 @@ void runServerRequest (int clientSock) {
   string responseMsg = "";
   // Wasn't in Cache, get proper message from Host
   responseMsg = talkToHost(getHostName(clientMsg), clientMsg);
-  try {
+
   // Return HTTP Message to client.
   if (!sendMessage(responseMsg, clientSock)) {
     cerr << "Failed to send message back." << endl;
   }
-  } catch (...) {
-    cerr << "Was in Talk to host" << endl;
-  }
+
 
 }
 
