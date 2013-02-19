@@ -18,6 +18,7 @@
 #include<pthread.h>
 #include<tr1/unordered_map>
 
+
 using namespace std;
 
 // Data Structures
@@ -206,11 +207,8 @@ void* clientThread(void* args_p){
   pthread_detach(pthread_self());
 
   // Communicate with Client
-  try {
   runServerRequest(clientSock);
-  } catch(Exception) {
-    pthread_exit(NULL);
-  }
+ 
   // Close Client socket
   close(clientSock);
 
@@ -229,20 +227,22 @@ void runServerRequest (int clientSock) {
   string clientMsg;
   int status;
   int bytesRecv;
-  
   // Begin handling communication with Server.
   // Receive HTTP Message from client.
   clientMsg = recvMessage(clientSock);
+
 
   // Forward HTTP Message to host.
   string responseMsg = "";
   // Wasn't in Cache, get proper message from Host
   responseMsg = talkToHost(getHostName(clientMsg), clientMsg);
-
-
+  try {
   // Return HTTP Message to client.
   if (!sendMessage(responseMsg, clientSock)) {
     cerr << "Failed to send message back." << endl;
+  }
+  } catch (...) {
+    cerr << "Was in Talk to host" << endl;
   }
 
 }
@@ -480,12 +480,12 @@ void addToCache(string httpRequest, string httpResponse) {
 }
 
 string checkCache(string httpRequest) {
-  //pthread_mutex_lock(&cacheLock);
+  pthread_mutex_lock(&cacheLock);
   tr1::unordered_map<string,string>::const_iterator foundItem = cacheMap.find(scrubClientMsg(httpRequest));
   if (foundItem != cacheMap.end() ) {
     return foundItem->second;
   } else return "";
-  //pthread_mutex_unlock(&cacheLock);
+  pthread_mutex_unlock(&cacheLock);
 }
 
 string cacheCheckingMsg(string httpRequest, string httpResponse) {
