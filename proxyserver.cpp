@@ -233,24 +233,25 @@ string getHostName(string httpMsg){
   string hostName = "";
 
   // Store the whole host name
-  hostName.append(httpMsg,
-		  httpMsg.find("Host: ")+6,
-		  httpMsg.find("\n",httpMsg.find("Host: ")) - httpMsg.find("Host: ") - 6);
+  if (httpMsg.find("Host: ") != 0) {
+    hostName.append(httpMsg,
+		    httpMsg.find("Host: ")+6,
+		    httpMsg.find("\n",httpMsg.find("Host: ")) - httpMsg.find("Host: ") - 6);
 
-  // Remove spaces
-  for(int i=0; i < hostName.length(); i++) {
-    if ( hostName[i] == ' ') {
-      hostName.replace(i,1, "");
-      i--;
-    } else if (hostName[i] == '\r') {
-      hostName.replace(i,1, "");
-      i--;
-    } else if (hostName[i] == '\n') {
-      hostName.replace(i,1, "");
-      i--;
+    // Remove spaces
+    for(int i=0; i < hostName.length(); i++) {
+      if ( hostName[i] == ' ') {
+	hostName.replace(i,1, "");
+	i--;
+      } else if (hostName[i] == '\r') {
+	hostName.replace(i,1, "");
+	i--;
+      } else if (hostName[i] == '\n') {
+	hostName.replace(i,1, "");
+	i--;
+      }
     }
   }
-
   // Return Host Name
   return hostName;
 }
@@ -271,11 +272,11 @@ string talkToHost(string hostName, string httpMsg){
   host = gethostbyname(hostName.c_str());
   if (!host) {
     cerr << "Unable to resolve hostname's IP Address. Exiting..." << endl;
-    return responseMsg;
+    pthread_exit(NULL);
   }
   tmpIP = inet_ntoa(*(struct in_addr *)host ->h_addr_list[0]);
   status = inet_pton(AF_INET, tmpIP, (void*) &hostIP);
-  if (status <= 0) exit(-1);
+  if (status <= 0) pthread_exit(NULL);
   status = 0;
 
   // Establish socket and address to talk to Host
@@ -288,13 +289,13 @@ string talkToHost(string hostName, string httpMsg){
   status = connect(hostSock, (struct sockaddr *) &serverAddress, sizeof(serverAddress));
   if (status < 0) {
     cerr << "Error opening host connection." << endl;
-    return responseMsg;
+    pthread_exit(NULL);
   }
 
   // Forward Message
   if (!sendMessage(httpMsg, hostSock)){
     cerr << "There was an error attempting to send information to host." << endl;
-    exit(-1);
+    pthread_exit(NULL);
   }
   // Receive Response
   responseMsg = recvMessage(hostSock);
