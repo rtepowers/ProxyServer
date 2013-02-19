@@ -22,19 +22,19 @@ using namespace std;
 
 // Data Structures
 struct sockAddr {
-  unsigned short sa_family;   // Address family (AF_INET)
-  char sa_data[14];           // Protocol-specific addressinfo
+  unsigned short sa_family; // Address family (AF_INET)
+  char sa_data[14]; // Protocol-specific addressinfo
 };
 
 struct in_address {
-  unsigned long s_addr;       // Internet Address (32bits)
+  unsigned long s_addr; // Internet Address (32bits)
 };
 
 struct sockAddress_in {
-  unsigned short sin_family;  // Address family (AF_INET)
-  unsigned short sin_port;    // Port (16bits)
-  struct in_addr sin_addr;    // Internet address structure
-  char sin_zero[8];           // Not Used.
+  unsigned short sin_family; // Address family (AF_INET)
+  unsigned short sin_port; // Port (16bits)
+  struct in_addr sin_addr; // Internet address structure
+  char sin_zero[8]; // Not Used.
 };
 
 struct threadArgs {
@@ -51,7 +51,7 @@ int status = pthread_mutex_init(&cacheLock, NULL);
 
 // Function Prototypes
 void* clientThread(void* args_p);
-// Function allows program to handle multiple threads. 
+// Function allows program to handle multiple threads.
 // pre: args_p should carry a socket.
 // post: thread will detach and self terminate.
 
@@ -65,7 +65,7 @@ string getHostName(string httpMsg);
 // pre: none
 // post: none
 
-int talkToHost(string hostName, string httpMsg, int httpMsgLength, string reply);
+string talkToHost(string hostName, string httpMsg);
 // Function initiates communication with a particular host. Returns host response.
 // pre: hostName should be resolvable.
 // post: returns response string
@@ -75,19 +75,14 @@ bool sendMessage (string messageToSend, int sendSock);
 // pre: socket should exist.
 // post: none
 
-bool sendMessage (string messageToSend, int sizeOfMessage, int sendSock);
-// Function sends string to intended socket. Will return false if failure occurs
-// pre: socket should exist.
-// post: none
-
-int recvMessage (string httpMsg, int recvSock);
-// Function listens to socket for data.
+string recvMessage (int recvSock);
+// Function listens to socket for data. Expects <CRLF CRLF> delimiter for expiration.
 // pre: socket should exist.
 // post: none
 
 string getResponseCode (string httpMsg);
 // Function pulls HTTP response code from message received.
-// pre: Message should be  a response message.
+// pre: Message should be a response message.
 // post: none
 
 string getTermSig();
@@ -107,11 +102,6 @@ string makeGETrequest(string urlPath);
 
 string scrubClientMsg (string httpMsg);
 // Function removes unecessary Header information
-// pre: none
-// post: none
-
-int getMessageLength(string httpMsg);
-// Function parses httpMsg for content length.
 // pre: none
 // post: none
 
@@ -141,7 +131,7 @@ int main(int argNum, char* argValues[]) {
 
   // Set the socket Fields
   struct sockaddr_in serverAddress;
-  serverAddress.sin_family = AF_INET;    // Always AF_INET
+  serverAddress.sin_family = AF_INET; // Always AF_INET
   serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
   serverAddress.sin_port = htons(serverPort);
   
@@ -160,7 +150,7 @@ int main(int argNum, char* argValues[]) {
   }
   cout << endl << endl << "SERVER: Ready to accept connections. " << endl;
   
-    // Accept connections
+  // Accept connections
   while (true) {
     // Accept connections. No seriously, ACCEPT THEM!
     struct sockaddr_in clientAddress;
@@ -211,26 +201,24 @@ void* clientThread(void* args_p){
   pthread_exit(NULL);
 }
 
+
+
+
 void runServerRequest (int clientSock) {
   
   // Local variables.
   struct hostent* host;
   string hostName = "";
-  string clientMsg = "";
+  string clientMsg;
   int status;
-  int bytesRecv = 0;
+  int bytesRecv;
   
   // Begin handling communication with Server.
   // Receive HTTP Message from client.
-  bytesRecv = recvMessage(clientMsg, clientSock);
-
-  cout << clientMsg << endl;
+  clientMsg = recvMessage(clientSock);
 
   // Forward HTTP Message to host.
-  string responseMsg = "";
-  int responseLength = talkToHost(getHostName(clientMsg), clientMsg, bytesRecv, responseMsg);
-
-  cout << responseMsg << endl;
+  string responseMsg = talkToHost(getHostName(clientMsg), clientMsg);
 
   // Return HTTP Message to client.
   if (!sendMessage(responseMsg, clientSock)) {
@@ -245,13 +233,9 @@ string getHostName(string httpMsg){
   string hostName = "";
 
   // Store the whole host name
-  if (httpMsg.find("Host: ") != 0) {
-  hostName.append(httpMsg, 
-		  httpMsg.find("Host: ")+6, 
+  hostName.append(httpMsg,
+		  httpMsg.find("Host: ")+6,
 		  httpMsg.find("\n",httpMsg.find("Host: ")) - httpMsg.find("Host: ") - 6);
-  } else {
-    return hostName;
-  }
 
   // Remove spaces
   for(int i=0; i < hostName.length(); i++) {
@@ -271,7 +255,7 @@ string getHostName(string httpMsg){
   return hostName;
 }
 
-int talkToHost(string hostName, string httpMsg, int httpMsgLength, string reply){
+string talkToHost(string hostName, string httpMsg){
 
   // Local Variables
   struct hostent* host;
@@ -287,7 +271,7 @@ int talkToHost(string hostName, string httpMsg, int httpMsgLength, string reply)
   host = gethostbyname(hostName.c_str());
   if (!host) {
     cerr << "Unable to resolve hostname's IP Address. Exiting..." << endl;
-    return 0;
+    return responseMsg;
   }
   tmpIP = inet_ntoa(*(struct in_addr *)host ->h_addr_list[0]);
   status = inet_pton(AF_INET, tmpIP, (void*) &hostIP);
@@ -304,34 +288,34 @@ int talkToHost(string hostName, string httpMsg, int httpMsgLength, string reply)
   status = connect(hostSock, (struct sockaddr *) &serverAddress, sizeof(serverAddress));
   if (status < 0) {
     cerr << "Error opening host connection." << endl;
-    return 0;
+    return responseMsg;
   }
 
   // Forward Message
-  if (!sendMessage(httpMsg, httpMsgLength, hostSock)){
+  if (!sendMessage(httpMsg, hostSock)){
     cerr << "There was an error attempting to send information to host." << endl;
-    return 0;
+    exit(-1);
   }
   // Receive Response
-  int responseLength = recvMessage(responseMsg, hostSock);
-  if (responseLength == 0) {
+  responseMsg = recvMessage(hostSock);
+  if (responseMsg == "") {
     cerr << "Was unable to receive information from host." << endl;
-    return 0;
+    return responseMsg;
   }
 
   // Great Success!
-  return responseLength;
+  return responseMsg;
 }
 
-bool sendMessage (string messageToSend, int sizeOfMessage, int sendSock) {
+bool sendMessage (string messageToSend, int sendSock) {
 
   // Local Variables
-  int msgLength = sizeOfMessage;
+  int msgLength = messageToSend.length();
   int msgSent = 0;
-  char msgBuff[msgLength];
+  char msgBuff[msgLength-1];
 
   // Transfer message.
-  strcpy(msgBuff, messageToSend.c_str());
+  memcpy(msgBuff, messageToSend.c_str(), msgLength);
 
   // Send message
   msgSent = send(sendSock, msgBuff, msgLength, 0);
@@ -344,19 +328,15 @@ bool sendMessage (string messageToSend, int sizeOfMessage, int sendSock) {
   return true;
 }
 
-int recvMessage (string &msgReceived, int recvSock) {
+string recvMessage (int recvSock) {
 
   // Local Variables
   string responseMsg = "";
   int bytesRecv;
-  int contentSize = 0;
-  char* restOfMessage;
-
   
   // Begin handling communication with Server.
   int bufferSize = 1024;
   int bytesLeft = bufferSize;
-  int bytesReceived = 0;
   string clientMsg = "";
   char buffer[bufferSize];
   char* buffPTR = buffer;
@@ -370,33 +350,13 @@ int recvMessage (string &msgReceived, int recvSock) {
       }
     }
     bytesRecv = recv(recvSock, buffPTR, bufferSize, 0);
-    if (bytesRecv == 0) {
-      break;
-    } else if (bytesRecv < 0){
-      cerr << "Problem occured receiving data" << endl;
+    if (bytesRecv <= 0) {
       break;
     }
     responseMsg.append(buffPTR, bytesRecv);
-    bytesReceived += bytesRecv;
+
   }
-
-  // If we still have data
-  contentSize = getMessageLength(responseMsg);
-  if (contentSize != 0) {
-    bytesLeft = contentSize;
-    char newBuffer[bytesLeft];
-    buffPTR = newBuffer;
-    while ((bytesRecv = recv(recvSock, buffPTR, bytesLeft, 0)) > 0) {
-      responseMsg.append(newBuffer, bytesRecv);
-      bytesLeft = bytesLeft - bytesRecv;
-    }
-  }
-
-
-  msgReceived = responseMsg;
-
-
-  return (bytesReceived + contentSize);
+  return responseMsg;
 }
 
 string makeGETrequest(string urlPath) {
@@ -419,17 +379,17 @@ string getURL(string httpMsg) {
 
   // Process HTTP message
   if (httpMsg.find("https://")){
-    url.append(httpMsg, 
-	       httpMsg.find("GET https://") + 12, 
-	       httpMsg.find(" HTTP/1.0") -  (httpMsg.find("GET https://") + 12));
+    url.append(httpMsg,
+	       httpMsg.find("GET https://") + 12,
+	       httpMsg.find(" HTTP/1.0") - (httpMsg.find("GET https://") + 12));
   } else if (httpMsg.find("http://")) {
-    url.append(httpMsg, 
-	       httpMsg.find("GET http://") + 11, 
-	       httpMsg.find(" HTTP/1.0") -  (httpMsg.find("GET http://") + 11));
+    url.append(httpMsg,
+	       httpMsg.find("GET http://") + 11,
+	       httpMsg.find(" HTTP/1.0") - (httpMsg.find("GET http://") + 11));
   } else {
-    url.append(httpMsg, 
-	       httpMsg.find("GET ") + 4, 
-	       httpMsg.find(" HTTP/1.0") -  (httpMsg.find("GET ") + 4));
+    url.append(httpMsg,
+	       httpMsg.find("GET ") + 4,
+	       httpMsg.find(" HTTP/1.0") - (httpMsg.find("GET ") + 4));
   }
 
   
@@ -446,9 +406,9 @@ string getResponseCode (string httpMsg) {
   string responseCode = "";
 
   // Store the whole host name
-  responseCode.append(httpMsg, 
-		  httpMsg.find("HTTP/1.0 ")+9, 
-		  3);
+  responseCode.append(httpMsg,
+		      httpMsg.find("HTTP/1.0 ")+9,
+		      3);
 
   // Remove spaces
   for(int i=0; i < responseCode.length(); i++) {
@@ -472,7 +432,8 @@ string scrubClientMsg (string httpMsg) {
 
   // Local variabes
   string betterMsg = httpMsg;
- 
+  
+  //betterMsg.replace(betterMsg.find(""),1,"");
 
   return betterMsg;
 }
@@ -481,18 +442,7 @@ int getMessageLength(string httpMsg) {
 
   // Local Variables
   int msgLength = 0;
-  string textLength = "";
 
-  // parse httpMsg
-  if (httpMsg.find("Content-Length: ") != 0) {
-    textLength.append(httpMsg,
-		      httpMsg.find("Content-Length: ")+ 16,
-		      httpMsg.find("\n", httpMsg.find("Content-Length: "))-3);
-  
-    
-    stringstream ss(textLength);
-    ss >> msgLength;
-  }
   return msgLength;
 }
 
