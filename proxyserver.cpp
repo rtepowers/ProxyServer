@@ -80,6 +80,31 @@ string HostProcessing (string clientMsg);
 // pre: none
 // post: none
 
+string getHost(string httpMsg);
+// Function extracts the Host: value from an httpMsg
+// pre: none
+// post: none
+
+string getReqType(string httpMsg);
+// Function extracts the Message type from an httpMsg
+// pre: none
+// post: none
+
+string getUri(string httpMsg);
+// Function extracts the URI from an httpMsg
+// pre: none
+// post: none
+
+void addToCache (string request, string response);
+// Function adds item to cache.
+// pre: none
+// post: none
+
+string checkCache (string httpMsg);
+// Function checks cache for item
+// pre: none
+// post: none
+
 int main(int argNum, char* argValues[]) {
 
   // Need to grab Command-line arguments and convert them to useful types
@@ -186,7 +211,13 @@ void runServerRequest(int clientSock) {
   responseMsg = HostProcessing(requestMsg);
 
   // Send back to Browser
+  // Must use exception handling because browser can manually close connection.
+  try {
   SendMessageStream(clientSock, responseMsg);
+  } catch (...) {
+    close(clientSock);
+    pthread_exit(NULL);
+  }
 }
 
 string HostProcessing (string clientMsg) {
@@ -213,7 +244,7 @@ string HostProcessing (string clientMsg) {
   host = gethostbyname(hostName.c_str());
   if (!host) {
     cerr << "Unable to resolve hostname's IP Address. Exiting..." << endl;
-    pthread_exit(NULL);
+    return "";
   }
   tmpIP = inet_ntoa(*(struct in_addr *)host ->h_addr_list[0]);
   cout << "IP Address: " << tmpIP << endl;
@@ -269,19 +300,22 @@ string GetMessageStream(int clientSock, bool isHost) {
 	ss << buffPTR[i];
       }
       if (totalSize > 4 && !isHost){
-	if (buffer[totalSize-4] == '\r'
-	    && buffer[totalSize-3] == '\n'
-	    && buffer[totalSize-2] == '\r'
-	    && buffer[totalSize-1] == '\n') {
+	string tmpMsg = ss.str();
+	if (tmpMsg[tmpMsg.length()-4] == '\r'
+	    && tmpMsg[tmpMsg.length()-3] == '\n'
+	    && tmpMsg[tmpMsg.length()-2] == '\r'
+	    && tmpMsg[tmpMsg.length()-1] == '\n') {
 	  break;
 	}
       }
     }
   }
-  //ss << buffer;
 
+  string tmpStr = ss.str();
+  if (tmpStr.find("Connection: keep-alive") != string::npos)
+    tmpStr.replace(tmpStr.find("Connection: keep-alive"), 22, "Connection: close");
   // Return HttpRequestObj
-  return ss.str();
+  return tmpStr;
 }
 
 bool SendMessageStream(int hostSock, string Msgss) {
@@ -305,3 +339,112 @@ bool SendMessageStream(int hostSock, string Msgss) {
   
   return true;
 }
+
+string getHost(string httpMsg) {
+
+  // Local Variables
+  string hostName = "";
+
+  // Store the whole host name
+  if (httpMsg.find("Host: ") != string::npos) {
+    hostName.append(httpMsg,
+		    httpMsg.find("Host: ")+6,
+		    httpMsg.find("\n",httpMsg.find("Host: ")) - httpMsg.find("Host: ") - 7);
+
+  }
+  // Return Host Name
+  return hostName;
+}
+
+
+string getReqType(string httpMsg) {
+
+  // Local
+  string reqType = "";
+  if (httpMsg.find(" ") != string::npos) {
+    reqType.append(httpMsg, 0, httpMsg.find(" "));
+  }
+  return reqType;
+}
+
+string getUri(string httpMsg) {
+  
+  // Local Variables
+  string url = "";
+
+  // Process HTTP message
+  if (httpMsg.find("https://") != string::npos){
+    url.append(httpMsg,
+	       httpMsg.find("GET https://") + 12,
+	       httpMsg.find(" HTTP/1.0") - (httpMsg.find("GET https://") + 12));
+  } else if (httpMsg.find("http://") != string::npos) {
+    url.append(httpMsg,
+	       httpMsg.find("GET http://") + 11,
+	       httpMsg.find(" HTTP/1.0") - (httpMsg.find("GET http://") + 11));
+  } else {
+    url.append(httpMsg,
+	       httpMsg.find("GET ") + 4,
+	       httpMsg.find(" HTTP/1.0") - (httpMsg.find("GET ") + 4));
+  }
+
+  return url;
+}
+
+void addToCache (string request, string response) {
+  
+  string cacheKey = "";
+  cacheKey.append (getReqType(request));
+  cacheKey.append (getUri(request));
+  cacheKey.append (getHost(request));
+
+  // Critical Section
+  pthread_mutex_lock(&cacheLock);
+  if (cacheMap.size() < MAXCACHESIZE)
+    cacheMap.insert (make_pair<string, string>(cacheKey, response));
+  pthread_mutex_unlock(&cacheLock);
+}
+
+string checkCache (string httpMsg) {
+  
+  string cacheItem;
+  string cacheKey = "";
+  cacheKey.append (getReqType(httpMsg));
+  cacheKey.append (getUri(httpMsg));
+  cacheKey.append (getHost(httpMsg));
+
+  // Critical Section
+  pthread_mutex_lock(&cacheLock);
+  tr1::unordered_map<string,string>::const_iterator got = cacheMap.find(cacheKey);
+  if (got == cacheMap.end()) {
+    cacheItem = "";
+  } else {
+    cacheItem = got->second;
+  }
+  pthread_mutex_unlock(&cacheLock);
+
+  return cacheItem;
+}
+
+
+
+
+/*
+string getErrorMsg() {
+
+  stringstream ss;
+  ss << "HTTP/1.0 408 Request Timeout\r\n";
+  ss << "Content-Type: text/html; charset=UTF-8\r\n";
+  ss << "X-Content-Type-Options: nosniff\r\n";
+  ss << "Date: Wed, 20 Feb 2013 07:49:44 GMT\r\n";
+  ss << "Server: sffe\r\n";
+  ss << "Content-Length: 939\r\n";
+  ss << "X-XSS-Protection: 1; mode=block\r\n";
+  ss << "\r\n";
+  ss << "<!DOCTYPE html>";
+  ss << "<html lang=en>  \n<meta charset=utf-8>";
+  ss << "<meta name=viewport content=\"initial-scale=1, minimum-scale=1, width=device-width\">\n";
+  ss << "<title>Error 404 (Not Found)!!1</title>\n";
+  ss << "<\\html>";
+
+  return ss.str();
+  }*/
