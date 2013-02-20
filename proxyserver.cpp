@@ -352,7 +352,7 @@ bool SendMessageStream(int hostSock, string Msgss) {
   memcpy(msgBuff, messageToSend.c_str(), msgLength);
 
   // Send message
-  while (msgSend != msgLength) {
+  while (msgSent != msgLength) {
     msgSent = send(hostSock,(void*) msgBuff, msgLength, 0);
   }
   
