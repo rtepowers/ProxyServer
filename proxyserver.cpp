@@ -16,6 +16,7 @@
 #include<netdb.h>
 #include<pthread.h>
 #include<tr1/unordered_map>
+#include<ctime>
 
 using namespace std;
 
@@ -41,13 +42,13 @@ struct threadArgs {
 };
 
 // Globals
-const int MAXPENDING = 10;
+const int MAXPENDING = 25;
 unsigned short serverPort; // up to range 12099 for my own, or 17777
 pthread_mutex_t cacheLock;
 int status = pthread_mutex_init(&cacheLock, NULL);
 tr1::unordered_map<string, string> cacheMap;
 int numCacheItems = 0;
-const int MAXCACHESIZE = 30;
+const int MAXCACHESIZE = 100;
 
 // Function Prototypes
 void* clientThread(void* args_p);
@@ -105,6 +106,11 @@ string checkCache (string httpMsg);
 // pre: none
 // post: none
 
+string getErrorMsg();
+// Function returns the standard error message.
+// pre: none
+// post: none
+
 int main(int argNum, char* argValues[]) {
 
   // Need to grab Command-line arguments and convert them to useful types
@@ -156,7 +162,9 @@ int main(int argNum, char* argValues[]) {
     int clientSocket = accept(conn_socket, (struct sockaddr*) &clientAddress, &addrLen);
     if (clientSocket < 0) {
       cerr << "Error accepting connections." << endl;
-      break;
+      //break;
+      
+      continue;
     }
 
     // Create child thread to handle process
@@ -208,7 +216,12 @@ void runServerRequest(int clientSock) {
   
   // Process Browser Message
   // Check Cache
-  responseMsg = HostProcessing(requestMsg);
+  //responseMsg = HostProcessing(requestMsg);
+  responseMsg = checkCache(requestMsg);
+  if (responseMsg == "") {
+    // Didn't find in cache, try Host
+    responseMsg = HostProcessing(requestMsg);
+  }
 
   // Send back to Browser
   // Must use exception handling because browser can manually close connection.
@@ -244,7 +257,7 @@ string HostProcessing (string clientMsg) {
   host = gethostbyname(hostName.c_str());
   if (!host) {
     cerr << "Unable to resolve hostname's IP Address. Exiting..." << endl;
-    return "";
+    return getErrorMsg();
   }
   tmpIP = inet_ntoa(*(struct in_addr *)host ->h_addr_list[0]);
   cout << "IP Address: " << tmpIP << endl;
@@ -279,11 +292,14 @@ string GetMessageStream(int clientSock, bool isHost) {
 
   // Local Variables
   stringstream ss;
-  int bufferSize = 10000; 
+  int bufferSize = 1000; 
   int totalSize = 0;
   int bytesRecv;
   char buffer[bufferSize];
   char* buffPTR = buffer;
+  time_t timer;
+  time_t check;
+  time(&timer);
   memset(buffPTR, '\0', bufferSize);
 
   // Handle communications
@@ -308,12 +324,18 @@ string GetMessageStream(int clientSock, bool isHost) {
 	  break;
 	}
       }
+      time(&check);
+      if (difftime(check,timer) > 4) {
+	cout << "Time Failed: " << difftime(check, timer) << endl;
+	close(clientSock);
+	pthread_exit(NULL);
+      }
+
     }
   }
-
   string tmpStr = ss.str();
   if (tmpStr.find("Connection: keep-alive") != string::npos)
-    tmpStr.replace(tmpStr.find("Connection: keep-alive"), 22, "Connection: close");
+    tmpStr.replace(tmpStr.find("Connection: keep-alive"), 24, "");
   // Return HttpRequestObj
   return tmpStr;
 }
@@ -330,11 +352,8 @@ bool SendMessageStream(int hostSock, string Msgss) {
   memcpy(msgBuff, messageToSend.c_str(), msgLength);
 
   // Send message
+  while (msgSend != msgLength) {
   msgSent = send(hostSock,(void*) msgBuff, msgLength, 0);
-  if (msgSent != msgLength){
-    
-    cerr << "Unable to send message. Aborting connection." << endl;
-    return false;
   }
   
   return true;
@@ -399,8 +418,15 @@ void addToCache (string request, string response) {
 
   // Critical Section
   pthread_mutex_lock(&cacheLock);
-  if (cacheMap.size() < MAXCACHESIZE)
+  try {
+  if (cacheMap.size() < MAXCACHESIZE) {
     cacheMap.insert (make_pair<string, string>(cacheKey, response));
+  } else {
+    cacheMap.erase (cacheMap.begin());
+    cacheMap.insert (make_pair<string, string>(cacheKey, response));
+  }
+  } catch (...) {
+  }
   pthread_mutex_unlock(&cacheLock);
 }
 
@@ -414,37 +440,42 @@ string checkCache (string httpMsg) {
 
   // Critical Section
   pthread_mutex_lock(&cacheLock);
-  tr1::unordered_map<string,string>::const_iterator got = cacheMap.find(cacheKey);
-  if (got == cacheMap.end()) {
-    cacheItem = "";
+  if (cacheMap.size() != 0) {
+    try {
+      tr1::unordered_map<string,string>::const_iterator got = cacheMap.find(cacheKey);
+      if (got == cacheMap.end()) {
+	cacheItem = "";
+      } else {
+	cacheItem = got->second;
+      }
+    } catch (...) {
+      cacheItem = "";
+    }
   } else {
-    cacheItem = got->second;
+    cacheItem = "";
   }
   pthread_mutex_unlock(&cacheLock);
 
   return cacheItem;
 }
 
-
-
-
-/*
 string getErrorMsg() {
 
   stringstream ss;
+  time_t rawtime;
   ss << "HTTP/1.0 408 Request Timeout\r\n";
   ss << "Content-Type: text/html; charset=UTF-8\r\n";
   ss << "X-Content-Type-Options: nosniff\r\n";
-  ss << "Date: Wed, 20 Feb 2013 07:49:44 GMT\r\n";
-  ss << "Server: sffe\r\n";
-  ss << "Content-Length: 939\r\n";
+  ss << "Date: " << ctime(&rawtime) << "\r\n";
+  ss << "Server: CSS2\r\n";
+  ss << "Content-Length: 230\r\n";
   ss << "X-XSS-Protection: 1; mode=block\r\n";
   ss << "\r\n";
   ss << "<!DOCTYPE html>";
   ss << "<html lang=en>  \n<meta charset=utf-8>";
   ss << "<meta name=viewport content=\"initial-scale=1, minimum-scale=1, width=device-width\">\n";
-  ss << "<title>Error 404 (Not Found)!!1</title>\n";
+  ss << "<title>Error 404 (Not Found)!!</title>\n";
   ss << "<\\html>";
 
   return ss.str();
-  }*/
+}
