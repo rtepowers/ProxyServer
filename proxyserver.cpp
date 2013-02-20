@@ -353,7 +353,7 @@ bool SendMessageStream(int hostSock, string Msgss) {
 
   // Send message
   while (msgSend != msgLength) {
-  msgSent = send(hostSock,(void*) msgBuff, msgLength, 0);
+    msgSent = send(hostSock,(void*) msgBuff, msgLength, 0);
   }
   
   return true;
