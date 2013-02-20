@@ -228,6 +228,7 @@ void runServerRequest(int clientSock) {
   try {
   SendMessageStream(clientSock, responseMsg);
   } catch (...) {
+    cerr << "Browser Closed Connection! " << endl;
     close(clientSock);
     pthread_exit(NULL);
   }
