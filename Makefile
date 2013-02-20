@@ -1,7 +1,7 @@
 all: hw3
 hw3: proxyserver.cpp
-	g++ proxyserver.cpp -o proxyServer -pthread
+	g++ proxyserver.cpp -o proxyserver -pthread
 
 clean:
-	rm -rf proxyServer 
+	rm -rf proxyserver 
 

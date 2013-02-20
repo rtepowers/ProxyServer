@@ -17,6 +17,8 @@
 #include<pthread.h>
 #include<tr1/unordered_map>
 #include<ctime>
+#include<errno.h>
+#include<vector>
 
 using namespace std;
 
@@ -113,6 +115,9 @@ string getErrorMsg();
 
 int main(int argNum, char* argValues[]) {
 
+  // Local
+  vector<int> socketList;
+  
   // Need to grab Command-line arguments and convert them to useful types
   // Initialize arguments with proper variables.
   if (argNum != 2){
@@ -161,12 +166,19 @@ int main(int argNum, char* argValues[]) {
     socklen_t addrLen = sizeof(clientAddress);
     int clientSocket = accept(conn_socket, (struct sockaddr*) &clientAddress, &addrLen);
     if (clientSocket < 0) {
-      cerr << "Error accepting connections." << endl;
+      cerr << "Error accepting connections." << strerror(errno) << endl;
       //break;
-      
+      while (socketList.size() != 0) {
+	try {
+	close(socketList.back());
+	} catch (...) {
+	}
+	socketList.pop_back();
+      }
+      cerr << "Cleared the sockets!" << endl;
       continue;
     }
-
+    socketList.push_back(clientSocket);
     // Create child thread to handle process
     struct threadArgs* args_p = new threadArgs;
     args_p -> clientSock = clientSocket;
@@ -217,11 +229,11 @@ void runServerRequest(int clientSock) {
   // Process Browser Message
   // Check Cache
   //responseMsg = HostProcessing(requestMsg);
-  responseMsg = checkCache(requestMsg);
-  if (responseMsg == "") {
+  //responseMsg = checkCache(requestMsg);
+  //if (responseMsg == "") {
     // Didn't find in cache, try Host
     responseMsg = HostProcessing(requestMsg);
-  }
+    //}
 
   // Send back to Browser
   // Must use exception handling because browser can manually close connection.
@@ -263,7 +275,7 @@ string HostProcessing (string clientMsg) {
   tmpIP = inet_ntoa(*(struct in_addr *)host ->h_addr_list[0]);
   cout << "IP Address: " << tmpIP << endl;
   status = inet_pton(AF_INET, tmpIP, (void*) &hostIP);
-  if (status <= 0) pthread_exit(NULL);
+  if (status <= 0) return getErrorMsg();
   status = 0;
 
   // Establish socket and address to talk to Host
@@ -276,7 +288,8 @@ string HostProcessing (string clientMsg) {
   status = connect(hostSock, (struct sockaddr *) &serverAddress, sizeof(serverAddress));
   if (status < 0) {
     cerr << "Error opening host connection." << endl;
-    pthread_exit(NULL);
+    
+    return getErrorMsg();
   }
 
   // Forward Message
@@ -308,7 +321,12 @@ string GetMessageStream(int clientSock, bool isHost) {
     bytesRecv = recv(clientSock, (void*) buffPTR, bufferSize, 0);
     if (bytesRecv < 0) {
       cerr << "Error occured while trying to receive data." << endl;
-      pthread_exit(NULL);
+      if (isHost) {
+	return getErrorMsg();
+      } else {
+	close(clientSock);
+	pthread_exit(NULL);
+      }
     } else if (bytesRecv == 0) {
       break;
     } else {
@@ -328,8 +346,7 @@ string GetMessageStream(int clientSock, bool isHost) {
       time(&check);
       if (difftime(check,timer) > 4) {
 	cout << "Time Failed: " << difftime(check, timer) << endl;
-	close(clientSock);
-	pthread_exit(NULL);
+	return getErrorMsg();
       }
 
     }
