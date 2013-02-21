@@ -228,7 +228,6 @@ void runServerRequest(int clientSock) {
   
   // Process Browser Message
   // Check Cache
-  //responseMsg = HostProcessing(requestMsg);
   //responseMsg = checkCache(requestMsg);
   //if (responseMsg == "") {
     // Didn't find in cache, try Host
@@ -299,6 +298,7 @@ string HostProcessing (string clientMsg) {
   responseMsg =  GetMessageStream(hostSock, true);
 
   // Great Success!
+  close(hostSock);
   return responseMsg;
 }
 
