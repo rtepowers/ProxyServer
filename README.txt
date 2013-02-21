@@ -5,13 +5,11 @@ Ray Powers, Nichole Minas, Russell Asher
 
 ---
 assumptions: 
-usage is how described in the assignment
 max threads capped at 50
 
 ---
 description: 
-This program will provide a simple telnet-like clone now supporting
-multi-clients using multi-threating (PThreads) with cache management.
+This program will provide a simple and easy to use HTTP/1.0 Web Proxy Cache server.
 
 ---
 Compile:
