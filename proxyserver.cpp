@@ -168,17 +168,8 @@ int main(int argNum, char* argValues[]) {
     if (clientSocket < 0) {
       cerr << "Error accepting connections." << strerror(errno) << endl;
       //break;
-      while (socketList.size() != 0) {
-	try {
-	close(socketList.back());
-	} catch (...) {
-	}
-	socketList.pop_back();
-      }
-      cerr << "Cleared the sockets!" << endl;
       continue;
     }
-    socketList.push_back(clientSocket);
     // Create child thread to handle process
     struct threadArgs* args_p = new threadArgs;
     args_p -> clientSock = clientSocket;
@@ -225,14 +216,19 @@ void runServerRequest(int clientSock) {
 
   // Get Browser message
   requestMsg = GetMessageStream(clientSock, false);
+  cout << "Browser Message:" << endl;
+  cout << requestMsg << endl;
   
   // Process Browser Message
   // Check Cache
   //responseMsg = checkCache(requestMsg);
   //if (responseMsg == "") {
     // Didn't find in cache, try Host
-    responseMsg = HostProcessing(requestMsg);
+  responseMsg = HostProcessing(requestMsg);
     //}
+
+  cout << "Host Response: " << endl;
+  cout << responseMsg << endl;
 
   // Send back to Browser
   // Must use exception handling because browser can manually close connection.
@@ -264,7 +260,7 @@ string HostProcessing (string clientMsg) {
 		    tmpMsg.find("Host: ") + 6,
 		    tmpMsg.find("\n", tmpMsg.find("Host: ")) -tmpMsg.find("Host: ")-7);
   }
-  cout << "HOSTNAME: " << hostName << endl;
+  cout << "HOSTNAME: " << hostName << " @ ";
   // Get Host IP Address
   host = gethostbyname(hostName.c_str());
   if (!host) {
@@ -272,7 +268,7 @@ string HostProcessing (string clientMsg) {
     return getErrorMsg();
   }
   tmpIP = inet_ntoa(*(struct in_addr *)host ->h_addr_list[0]);
-  cout << "IP Address: " << tmpIP << endl;
+  cout << tmpIP << endl;
   status = inet_pton(AF_INET, tmpIP, (void*) &hostIP);
   if (status <= 0) return getErrorMsg();
   status = 0;
@@ -297,6 +293,7 @@ string HostProcessing (string clientMsg) {
   // Receive Response
   responseMsg =  GetMessageStream(hostSock, true);
 
+  close(hostSock);
   // Great Success!
   close(hostSock);
   return responseMsg;
@@ -440,7 +437,8 @@ void addToCache (string request, string response) {
   if (cacheMap.size() < MAXCACHESIZE) {
     cacheMap.insert (make_pair<string, string>(cacheKey, response));
   } else {
-    cacheMap.erase (cacheMap.begin());
+    tr1::unordered_map<string,string>::const_iterator got = cacheMap.begin();
+    cacheMap.erase (got);
     cacheMap.insert (make_pair<string, string>(cacheKey, response));
   }
   } catch (...) {
